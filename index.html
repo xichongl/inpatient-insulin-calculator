@@ -76,12 +76,19 @@
       inset: 0;
       background: rgba(0,0,0,0.6);
       z-index: 999;
-      display: flex;
-      align-items: flex-start; /* flex-start + overflow-y:auto lets you scroll to the button on small screens */
-      justify-content: center;
-      padding: 16px;
+      overflow: hidden; /* scrolling handled by inner wrapper — iOS Safari won't scroll position:fixed elements */
+    }
+    /* Non-fixed scroll wrapper inside the overlay — this is what actually scrolls on iOS */
+    #disclaimer-scroll-wrapper {
+      height: 100%;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 16px;
+      box-sizing: border-box;
     }
     #disclaimer-modal {
       background: var(--white);
@@ -91,7 +98,7 @@
       padding: 32px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.3);
       animation: fadeUp 0.3s ease;
-      margin: auto; /* auto top/bottom margins center the modal on desktop when space is available */
+      margin: auto 0; /* vertical centering when modal is shorter than viewport */
     }
     #disclaimer-modal h2 {
       color: var(--blue-dark);
@@ -628,6 +635,7 @@
       .nav-row { flex-direction: column-reverse; gap: 10px; }
       .btn { width: 100%; justify-content: center; }
       #disclaimer-modal { padding: 20px 16px; border-radius: 10px; }
+      #disclaimer-scroll-wrapper { padding: 12px; }
       .step-header h2 { font-size: 1rem; }
       input[type=number] { max-width: 100%; }
       .field-grid-2 { grid-template-columns: 1fr; }
@@ -657,6 +665,7 @@
      DISCLAIMER MODAL
 ══════════════════════════════════════════════════════════════════ -->
 <div id="disclaimer-overlay" role="dialog" aria-modal="true" aria-labelledby="disclaimer-title">
+  <div id="disclaimer-scroll-wrapper">
   <div id="disclaimer-modal">
     <h2 id="disclaimer-title">⚕️ Clinical Decision Support Tool</h2>
     <div class="disclaimer-body">
@@ -669,8 +678,9 @@
       <span>I am a licensed healthcare professional and understand that these recommendations are clinical decision support only, not a substitute for clinical judgment or institutional protocols.</span>
     </label>
     <button id="btn-accept" disabled>Enter Tool</button>
-  </div>
-</div>
+  </div><!-- /#disclaimer-modal -->
+  </div><!-- /#disclaimer-scroll-wrapper -->
+</div><!-- /#disclaimer-overlay -->
 
 <!-- ══════════════════════════════════════════════════════════════
      HEADER
