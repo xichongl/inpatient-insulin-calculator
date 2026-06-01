@@ -77,9 +77,11 @@
       background: rgba(0,0,0,0.6);
       z-index: 999;
       display: flex;
-      align-items: center;
+      align-items: flex-start; /* flex-start + overflow-y:auto lets you scroll to the button on small screens */
       justify-content: center;
       padding: 16px;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
     #disclaimer-modal {
       background: var(--white);
@@ -89,9 +91,7 @@
       padding: 32px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.3);
       animation: fadeUp 0.3s ease;
-      max-height: 90vh;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
+      margin: auto; /* auto top/bottom margins center the modal on desktop when space is available */
     }
     #disclaimer-modal h2 {
       color: var(--blue-dark);
