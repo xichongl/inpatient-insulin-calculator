@@ -1,0 +1,2325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inpatient Insulin Dosing Assistant</title>
+  <style>
+    /* ─── Reset & base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue-dark:   #1a3a5c;
+      --blue-mid:    #2563a8;
+      --blue-light:  #dbeafe;
+      --blue-accent: #3b82f6;
+      --green:       #15803d;
+      --green-light: #dcfce7;
+      --amber:       #b45309;
+      --amber-light: #fef3c7;
+      --red:         #b91c1c;
+      --red-light:   #fee2e2;
+      --gray-50:     #f8fafc;
+      --gray-100:    #f1f5f9;
+      --gray-200:    #e2e8f0;
+      --gray-400:    #94a3b8;
+      --gray-600:    #475569;
+      --gray-800:    #1e293b;
+      --white:       #ffffff;
+      --radius:      10px;
+      --shadow:      0 4px 24px rgba(0,0,0,0.10);
+      --transition:  0.2s ease;
+    }
+
+    html { font-size: 16px; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--gray-100);
+      color: var(--gray-800);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ─── Header ────────────────────────────────────────────────── */
+    header {
+      background: var(--blue-dark);
+      color: var(--white);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    header .logo {
+      font-size: 1.6rem;
+      line-height: 1;
+    }
+    header h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    header p {
+      font-size: 0.78rem;
+      opacity: 0.75;
+      margin-top: 2px;
+    }
+
+    /* ─── Disclaimer modal ──────────────────────────────────────── */
+    #disclaimer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    #disclaimer-modal {
+      background: var(--white);
+      border-radius: 14px;
+      max-width: 560px;
+      width: 100%;
+      padding: 32px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      animation: fadeUp 0.3s ease;
+    }
+    #disclaimer-modal h2 {
+      color: var(--blue-dark);
+      font-size: 1.2rem;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #disclaimer-modal .disclaimer-body {
+      font-size: 0.88rem;
+      color: var(--gray-600);
+      line-height: 1.65;
+      border-left: 4px solid var(--amber);
+      padding-left: 14px;
+      margin: 16px 0;
+      background: var(--amber-light);
+      padding: 14px 14px 14px 18px;
+      border-radius: 0 6px 6px 0;
+    }
+    #disclaimer-modal .disclaimer-body p + p { margin-top: 10px; }
+    #disclaimer-modal .agree-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin: 18px 0 22px;
+      font-size: 0.88rem;
+    }
+    #disclaimer-modal .agree-row input[type=checkbox] {
+      margin-top: 3px;
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      accent-color: var(--blue-mid);
+      cursor: pointer;
+    }
+    #btn-accept {
+      width: 100%;
+      padding: 13px;
+      background: var(--blue-mid);
+      color: var(--white);
+      border: none;
+      border-radius: var(--radius);
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+    #btn-accept:hover:not(:disabled) { background: var(--blue-dark); }
+    #btn-accept:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* ─── Main container ────────────────────────────────────────── */
+    main {
+      flex: 1;
+      max-width: 760px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 28px 16px 60px;
+    }
+
+    /* ─── Progress bar ──────────────────────────────────────────── */
+    #progress-section {
+      margin-bottom: 24px;
+    }
+    .progress-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--gray-400);
+      margin-bottom: 6px;
+    }
+    .progress-labels .active-label { color: var(--blue-mid); }
+    .progress-bar-track {
+      height: 6px;
+      background: var(--gray-200);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--blue-mid), var(--blue-accent));
+      border-radius: 99px;
+      transition: width 0.4s ease;
+    }
+    .step-count {
+      font-size: 0.78rem;
+      color: var(--gray-400);
+      text-align: right;
+      margin-top: 5px;
+    }
+
+    /* ─── Step cards ────────────────────────────────────────────── */
+    .step-card {
+      background: var(--white);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 28px 28px 24px;
+      display: none;
+      animation: fadeIn 0.25s ease;
+    }
+    .step-card.active { display: block; }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid var(--gray-100);
+    }
+    .step-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: var(--blue-light);
+      color: var(--blue-mid);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+    .step-header h2 {
+      font-size: 1.1rem;
+      color: var(--blue-dark);
+      font-weight: 700;
+    }
+    .step-header p {
+      font-size: 0.82rem;
+      color: var(--gray-600);
+      margin-top: 2px;
+    }
+
+    /* ─── Form elements ─────────────────────────────────────────── */
+    .field-group {
+      margin-bottom: 20px;
+    }
+    .field-group label {
+      display: block;
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--gray-800);
+      margin-bottom: 6px;
+    }
+    .field-group label .required { color: var(--red); margin-left: 2px; }
+    .field-group .hint {
+      font-size: 0.77rem;
+      color: var(--gray-400);
+      margin-top: 4px;
+    }
+
+    select, input[type=number], input[type=text] {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 8px;
+      font-size: 0.92rem;
+      color: var(--gray-800);
+      background: var(--white);
+      transition: border-color var(--transition), box-shadow var(--transition);
+      appearance: none;
+    }
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2394a3b8' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+    }
+    select:focus, input[type=number]:focus, input[type=text]:focus {
+      outline: none;
+      border-color: var(--blue-accent);
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+    }
+    input[type=number] { max-width: 160px; }
+
+    .input-row {
+      display: flex;
+      gap: 16px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+    .input-row .field-group { flex: 1; min-width: 120px; }
+
+    /* Radio / checkbox groups */
+    .radio-group, .check-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .radio-option, .check-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 14px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: border-color var(--transition), background var(--transition);
+      font-size: 0.88rem;
+      line-height: 1.4;
+    }
+    .radio-option:hover, .check-option:hover {
+      border-color: var(--blue-accent);
+      background: var(--blue-light);
+    }
+    .radio-option input, .check-option input {
+      margin-top: 2px;
+      flex-shrink: 0;
+      accent-color: var(--blue-mid);
+      width: 15px;
+      height: 15px;
+      cursor: pointer;
+    }
+    .radio-option.selected, .check-option.selected {
+      border-color: var(--blue-mid);
+      background: var(--blue-light);
+    }
+    .radio-option strong, .check-option strong {
+      display: block;
+      font-weight: 600;
+      color: var(--gray-800);
+    }
+    .radio-option span, .check-option span {
+      display: block;
+      font-size: 0.77rem;
+      color: var(--gray-600);
+      margin-top: 2px;
+    }
+
+    /* Inline 2-col grid */
+    .field-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 520px) { .field-grid-2 { grid-template-columns: 1fr; } }
+
+    /* Section divider */
+    .section-divider {
+      border: none;
+      border-top: 1.5px solid var(--gray-100);
+      margin: 20px 0;
+    }
+    .section-label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--gray-400);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 14px;
+    }
+
+    /* Collapsible conditional fields */
+    .conditional {
+      display: none;
+      margin-top: 14px;
+      padding: 16px;
+      background: var(--gray-50);
+      border-radius: 8px;
+      border: 1.5px solid var(--gray-200);
+    }
+    .conditional.visible { display: block; }
+
+    /* Info / alert boxes */
+    .info-box {
+      display: flex;
+      gap: 10px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-size: 0.83rem;
+      line-height: 1.55;
+      margin-bottom: 16px;
+    }
+    .info-box .icon { flex-shrink: 0; font-size: 1rem; line-height: 1.4; }
+    .info-box.blue  { background: var(--blue-light);  color: var(--blue-dark); border-left: 4px solid var(--blue-mid); }
+    .info-box.amber { background: var(--amber-light); color: var(--amber);     border-left: 4px solid var(--amber); }
+    .info-box.red   { background: var(--red-light);   color: var(--red);       border-left: 4px solid var(--red); }
+    .info-box.green { background: var(--green-light); color: var(--green);     border-left: 4px solid var(--green); }
+
+    /* ─── Navigation buttons ────────────────────────────────────── */
+    .nav-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1.5px solid var(--gray-100);
+      gap: 12px;
+    }
+    .btn {
+      padding: 11px 24px;
+      border-radius: 8px;
+      font-size: 0.92rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: background var(--transition), transform var(--transition);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary {
+      background: var(--blue-mid);
+      color: var(--white);
+    }
+    .btn-primary:hover { background: var(--blue-dark); }
+    .btn-secondary {
+      background: var(--gray-100);
+      color: var(--gray-600);
+      border: 1.5px solid var(--gray-200);
+    }
+    .btn-secondary:hover { background: var(--gray-200); }
+    .btn-success {
+      background: var(--green);
+      color: var(--white);
+    }
+    .btn-success:hover { background: #166534; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* ─── Validation errors ─────────────────────────────────────── */
+    .field-error {
+      font-size: 0.77rem;
+      color: var(--red);
+      margin-top: 4px;
+      display: none;
+    }
+    .field-error.show { display: block; }
+    select.error, input.error {
+      border-color: var(--red);
+    }
+
+    /* ─── Results page ──────────────────────────────────────────── */
+    #step-results {
+      display: none;
+    }
+    #step-results.active { display: block; }
+
+    .results-header {
+      text-align: center;
+      padding: 20px 0 24px;
+    }
+    .results-header .check-badge {
+      width: 60px;
+      height: 60px;
+      background: var(--green-light);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+      margin: 0 auto 14px;
+    }
+    .results-header h2 {
+      font-size: 1.3rem;
+      color: var(--blue-dark);
+      font-weight: 700;
+    }
+    .results-header p {
+      font-size: 0.85rem;
+      color: var(--gray-600);
+      margin-top: 6px;
+    }
+
+    .result-section {
+      margin-bottom: 20px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .result-section-header {
+      background: var(--blue-dark);
+      color: var(--white);
+      padding: 12px 18px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .result-section-body {
+      padding: 18px;
+      background: var(--white);
+    }
+
+    .dose-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--gray-100);
+      font-size: 0.88rem;
+      gap: 12px;
+    }
+    .dose-row:last-child { border-bottom: none; }
+    .dose-label { color: var(--gray-600); flex: 1; }
+    .dose-value {
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--blue-dark);
+      text-align: right;
+      min-width: 80px;
+    }
+    .dose-value.highlight {
+      color: var(--green);
+    }
+    .dose-rationale {
+      font-size: 0.77rem;
+      color: var(--gray-400);
+      margin-top: 3px;
+    }
+
+    /* Sliding scale table */
+    .ss-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.84rem;
+      margin-top: 6px;
+    }
+    .ss-table th {
+      background: var(--gray-100);
+      color: var(--gray-600);
+      font-weight: 700;
+      padding: 8px 10px;
+      text-align: center;
+      font-size: 0.77rem;
+    }
+    .ss-table td {
+      padding: 7px 10px;
+      text-align: center;
+      border-top: 1px solid var(--gray-100);
+    }
+    .ss-table tr:nth-child(even) td { background: var(--gray-50); }
+    .ss-table .bg-col { text-align: left; font-weight: 600; color: var(--gray-700); }
+    .ss-table .dose-col { font-weight: 700; color: var(--blue-dark); }
+    .ss-table .highlighted-row td { background: var(--blue-light) !important; }
+
+    .alert-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 14px 16px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      margin-bottom: 16px;
+    }
+    .alert-banner.danger {
+      background: var(--red-light);
+      border: 1.5px solid #fca5a5;
+      color: var(--red);
+    }
+    .alert-banner.warning {
+      background: var(--amber-light);
+      border: 1.5px solid #fcd34d;
+      color: var(--amber);
+    }
+    .alert-banner.info {
+      background: var(--blue-light);
+      border: 1.5px solid #93c5fd;
+      color: var(--blue-mid);
+    }
+    .alert-banner .alert-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+
+    .monitoring-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 0.87rem;
+    }
+    .monitoring-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      color: var(--gray-700);
+    }
+    .monitoring-list li::before {
+      content: "→";
+      color: var(--blue-mid);
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .result-footer {
+      margin-top: 24px;
+      padding: 14px 18px;
+      background: var(--amber-light);
+      border: 1.5px solid #fcd34d;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      color: var(--amber);
+      line-height: 1.55;
+    }
+    .result-footer strong { display: block; margin-bottom: 4px; }
+
+    .print-row {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    /* ─── Animations ────────────────────────────────────────────── */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ─── Print styles ──────────────────────────────────────────── */
+    @media print {
+      header, #progress-section, .nav-row, .print-row { display: none !important; }
+      body { background: white; }
+      .step-card { box-shadow: none; padding: 0; }
+      .result-section { break-inside: avoid; }
+    }
+
+    /* ─── Responsive tweaks ─────────────────────────────────────── */
+    @media (max-width: 520px) {
+      .step-card { padding: 20px 16px; }
+      header h1 { font-size: 0.95rem; }
+      .nav-row { flex-direction: column-reverse; }
+      .btn { width: 100%; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════
+     DISCLAIMER MODAL
+══════════════════════════════════════════════════════════════════ -->
+<div id="disclaimer-overlay" role="dialog" aria-modal="true" aria-labelledby="disclaimer-title">
+  <div id="disclaimer-modal">
+    <h2 id="disclaimer-title">⚕️ Clinical Decision Support Tool</h2>
+    <div class="disclaimer-body">
+      <p><strong>For licensed healthcare professionals only.</strong> This tool provides decision support for inpatient subcutaneous insulin dosing based on published Endotext / NCBI guidelines (NBK278972, Endocrine Society 2012 guidelines, ADA 2019 Inpatient Standards).</p>
+      <p>Recommendations are <strong>suggestions only</strong> and must be reviewed and approved by the responsible clinician. Individual patient factors, institutional protocols, pharmacist input, and clinical judgment always take precedence.</p>
+      <p>This tool does <strong>not</strong> replace formal diabetes consultation. Patients with complex insulin requirements, hypoglycemia unawareness, DKA, or HHS should have endocrinology involvement.</p>
+    </div>
+    <label class="agree-row">
+      <input type="checkbox" id="agree-checkbox" />
+      <span>I am a licensed healthcare professional and understand that these recommendations are clinical decision support only, not a substitute for clinical judgment or institutional protocols.</span>
+    </label>
+    <button id="btn-accept" disabled>Enter Tool</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     HEADER
+══════════════════════════════════════════════════════════════════ -->
+<header>
+  <div class="logo">💉</div>
+  <div>
+    <h1>Inpatient Insulin Dosing Assistant</h1>
+    <p>General Medicine Service · Basal-Bolus Subcutaneous Insulin</p>
+  </div>
+</header>
+
+<!-- ══════════════════════════════════════════════════════════════
+     MAIN
+══════════════════════════════════════════════════════════════════ -->
+<main>
+
+  <!-- Progress bar -->
+  <div id="progress-section">
+    <div class="progress-labels">
+      <span id="progress-step-name">Patient Info</span>
+      <span class="active-label" id="progress-pct">0%</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
+    </div>
+    <div class="step-count" id="step-count-label">Step 1 of 5</div>
+  </div>
+
+  <!-- ────────────────────────────────────────────────────────────
+       STEP 1 · Patient Basics
+  ──────────────────────────────────────────────────────────────── -->
+  <div class="step-card active" id="step-1">
+    <div class="step-header">
+      <div class="step-icon">👤</div>
+      <div>
+        <h2>Patient Information</h2>
+        <p>Basic demographics and hospital day</p>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label>Diabetes type <span class="required">*</span></label>
+      <div class="radio-group" id="dm-type-group">
+        <label class="radio-option">
+          <input type="radio" name="dm_type" value="T1DM" />
+          <div>
+            <strong>Type 1 DM</strong>
+            <span>Absolute insulin deficiency — ALWAYS requires basal insulin, even if NPO</span>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="dm_type" value="T2DM" />
+          <div>
+            <strong>Type 2 DM</strong>
+            <span>Insulin resistance ± relative deficiency</span>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="dm_type" value="stress" />
+          <div>
+            <strong>Stress hyperglycemia (no prior DM diagnosis)</strong>
+            <span>Hyperglycemia due to illness; no known DM history</span>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="dm_type" value="unknown" />
+          <div>
+            <strong>Unknown / not yet established</strong>
+          </div>
+        </label>
+      </div>
+      <div class="field-error" id="err-dm-type">Please select a diabetes type.</div>
+    </div>
+
+    <div class="field-grid-2">
+      <div class="field-group">
+        <label for="weight">Weight <span class="required">*</span></label>
+        <input type="number" id="weight" name="weight" placeholder="e.g. 80" min="20" max="400" step="0.5" />
+        <div class="hint">kilograms (kg)</div>
+        <div class="field-error" id="err-weight">Required — enter patient weight in kg.</div>
+      </div>
+      <div class="field-group">
+        <label for="height">Height <span class="required">*</span></label>
+        <input type="number" id="height" name="height" placeholder="e.g. 170" min="100" max="250" step="1" />
+        <div class="hint">centimeters (cm) — used for BMI &amp; sliding scale selection</div>
+        <div class="field-error" id="err-height">Required — enter patient height in cm.</div>
+      </div>
+    </div>
+
+    <!-- BMI display -->
+    <div class="info-box blue" id="bmi-display" style="display:none">
+      <span class="icon">📊</span>
+      <div id="bmi-text"></div>
+    </div>
+
+    <div class="field-group">
+      <label for="hospital-day">Hospital day (current) <span class="required">*</span></label>
+      <select id="hospital-day">
+        <option value="">— Select —</option>
+        <option value="1">Day 1 (admission day)</option>
+        <option value="2">Day 2</option>
+        <option value="3">Day 3 or beyond</option>
+      </select>
+      <div class="hint">Determines whether prior-day dose data is available for adjustment</div>
+      <div class="field-error" id="err-hospital-day">Please select the current hospital day.</div>
+    </div>
+
+    <div class="field-group">
+      <label for="renal-status">Renal function</label>
+      <select id="renal-status">
+        <option value="normal">Normal (eGFR ≥ 60)</option>
+        <option value="mild">Mild impairment (eGFR 45–59)</option>
+        <option value="moderate">Moderate impairment (eGFR 30–44)</option>
+        <option value="severe">Severe impairment (eGFR 15–29) / AKI</option>
+        <option value="esrd">ESRD / dialysis</option>
+      </select>
+      <div class="hint">Renal insufficiency ↓ insulin clearance → ↑ hypoglycemia risk; dose conservatively</div>
+    </div>
+
+    <div class="nav-row">
+      <span></span>
+      <button class="btn btn-primary" onclick="goToStep(2)">Next: Home Regimen →</button>
+    </div>
+  </div>
+
+  <!-- ────────────────────────────────────────────────────────────
+       STEP 2 · Pre-Admission Diabetes Management
+  ──────────────────────────────────────────────────────────────── -->
+  <div class="step-card" id="step-2">
+    <div class="step-header">
+      <div class="step-icon">🏠</div>
+      <div>
+        <h2>Pre-Admission Diabetes Management</h2>
+        <p>What was the patient taking before admission?</p>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label>Home diabetes regimen <span class="required">*</span></label>
+      <div class="radio-group" id="home-regimen-group">
+        <label class="radio-option">
+          <input type="radio" name="home_regimen" value="diet" />
+          <div>
+            <strong>Diet controlled only</strong>
+            <span>No medications for diabetes at home</span>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="home_regimen" value="oral" />
+          <div>
+            <strong>Oral agents only</strong>
+            <span>Metformin, sulfonylurea, DPP-4 inhibitor, SGLT-2, etc.</span>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="home_regimen" value="non_insulin_injectable" />
+          <div>
+            <strong>Non-insulin injectable only</strong>
+            <span>GLP-1 receptor agonist (semaglutide, dulaglutide, etc.) — no insulin</span>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="home_regimen" value="basal_only" />
+          <div>
+            <strong>Basal insulin only</strong>
+            <span>Long-acting insulin once or twice daily; no mealtime insulin</span>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="home_regimen" value="basal_bolus" />
+          <div>
+            <strong>Basal + bolus insulin (full regimen)</strong>
+            <span>Long-acting basal plus mealtime rapid-acting insulin</span>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="home_regimen" value="premixed" />
+          <div>
+            <strong>Premixed insulin</strong>
+            <span>e.g., 70/30 NPH/regular or 75/25 lispro protamine; twice daily</span>
+          </div>
+        </label>
+      </div>
+      <div class="field-error" id="err-home-regimen">Please select the home regimen.</div>
+    </div>
+
+    <!-- Conditional: insulin at home -->
+    <div class="conditional" id="cond-home-insulin">
+      <div class="section-label">Home insulin doses</div>
+
+      <div class="field-group">
+        <label for="home-a1c">Most recent HbA1c (if known)</label>
+        <input type="number" id="home-a1c" placeholder="e.g. 8.2" min="4" max="20" step="0.1" />
+        <div class="hint">Helps gauge pre-admission glycemic control. Leave blank if unknown.</div>
+      </div>
+
+      <div class="field-group">
+        <label>Was home glucose control adequate?</label>
+        <select id="home-control">
+          <option value="well">Well controlled (mostly at goal)</option>
+          <option value="suboptimal">Suboptimal (running high but stable)</option>
+          <option value="poor">Poorly controlled (frequently very high)</option>
+          <option value="unknown">Unknown</option>
+        </select>
+      </div>
+
+      <hr class="section-divider" />
+      <div class="section-label">Basal insulin</div>
+      <div class="field-grid-2">
+        <div class="field-group">
+          <label for="home-basal-type">Basal type</label>
+          <select id="home-basal-type">
+            <option value="">— Select —</option>
+            <option value="glargine">Glargine (Lantus / Basaglar / Toujeo)</option>
+            <option value="detemir">Detemir (Levemir)</option>
+            <option value="degludec">Degludec (Tresiba)</option>
+            <option value="nph">NPH (Humulin N / Novolin N)</option>
+            <option value="none">None (bolus-only or N/A)</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label for="home-basal-dose">Basal dose (units/day)</label>
+          <input type="number" id="home-basal-dose" placeholder="e.g. 20" min="0" max="300" />
+        </div>
+      </div>
+
+      <div id="cond-bolus-section">
+        <hr class="section-divider" />
+        <div class="section-label">Mealtime (bolus) insulin</div>
+        <div class="field-grid-2">
+          <div class="field-group">
+            <label for="home-bolus-type">Bolus type</label>
+            <select id="home-bolus-type">
+              <option value="">— Select —</option>
+              <option value="lispro">Lispro (Humalog)</option>
+              <option value="aspart">Aspart (NovoLog)</option>
+              <option value="glulisine">Glulisine (Apidra)</option>
+              <option value="regular">Regular (Humulin R / Novolin R)</option>
+              <option value="none">None</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="home-bolus-dose">Total daily bolus (units/day)</label>
+            <input type="number" id="home-bolus-dose" placeholder="e.g. 18" min="0" max="300" />
+            <div class="hint">Sum of all mealtime doses</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Conditional: oral agents -->
+    <div class="conditional" id="cond-oral-agents">
+      <div class="section-label">Oral agent details</div>
+      <div class="field-group">
+        <label>Which oral agents? (check all that apply)</label>
+        <div class="check-group">
+          <label class="check-option">
+            <input type="checkbox" name="oral_agents" value="metformin" />
+            <div><strong>Metformin</strong><span>Hold on admission (renal risk, contrast risk)</span></div>
+          </label>
+          <label class="check-option">
+            <input type="checkbox" name="oral_agents" value="su" />
+            <div><strong>Sulfonylurea</strong><span>Hold on admission (hypoglycemia risk when NPO)</span></div>
+          </label>
+          <label class="check-option">
+            <input type="checkbox" name="oral_agents" value="dpp4" />
+            <div><strong>DPP-4 inhibitor</strong><span>May be appropriate if glucose minimally elevated</span></div>
+          </label>
+          <label class="check-option">
+            <input type="checkbox" name="oral_agents" value="sglt2" />
+            <div><strong>SGLT-2 inhibitor</strong><span>Hold — risk of euglycemic DKA inpatient</span></div>
+          </label>
+          <label class="check-option">
+            <input type="checkbox" name="oral_agents" value="tzd" />
+            <div><strong>TZD (pioglitazone)</strong><span>Hold if fluid retention, CHF concern</span></div>
+          </label>
+          <label class="check-option">
+            <input type="checkbox" name="oral_agents" value="other" />
+            <div><strong>Other oral agent</strong></div>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav-row">
+      <button class="btn btn-secondary" onclick="goToStep(1)">← Back</button>
+      <button class="btn btn-primary" onclick="goToStep(3)">Next: Hospital Status →</button>
+    </div>
+  </div>
+
+  <!-- ────────────────────────────────────────────────────────────
+       STEP 3 · Current Hospital Status
+  ──────────────────────────────────────────────────────────────── -->
+  <div class="step-card" id="step-3">
+    <div class="step-header">
+      <div class="step-icon">🏥</div>
+      <div>
+        <h2>Current Hospital Status</h2>
+        <p>Nutrition, special circumstances, and clinical modifiers</p>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label>Nutritional status <span class="required">*</span></label>
+      <div class="radio-group" id="nutrition-group">
+        <label class="radio-option">
+          <input type="radio" name="nutrition" value="eating" />
+          <div>
+            <strong>Eating regular meals</strong>
+            <span>Tolerating a diet; standard basal-bolus applies</span>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="nutrition" value="poor_appetite" />
+          <div>
+            <strong>Poor appetite / eating &lt;50% meals</strong>
+            <span>Reduce nutritional insulin; use post-meal dosing based on intake</span>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="nutrition" value="npo_procedure" />
+          <div>
+            <strong>NPO for procedure / test</strong>
+            <span>Hold nutritional insulin; adjust basal (↓25% glargine, ↓25–50% NPH)</span>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="nutrition" value="npo_surgery_icu" />
+          <div>
+            <strong>NPO — surgical / ICU patient</strong>
+            <span>Consider insulin infusion; note this tool covers SQ insulin only</span>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="nutrition" value="tube_feeds" />
+          <div>
+            <strong>Continuous tube feeds</strong>
+            <span>Requires specific basal/nutritional split; check q4–6h BGs</span>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="nutrition" value="tpn" />
+          <div>
+            <strong>TPN (total parenteral nutrition)</strong>
+            <span>Insulin added to TPN bag; sliding scale for correction</span>
+          </div>
+        </label>
+      </div>
+      <div class="field-error" id="err-nutrition">Please select the patient's nutritional status.</div>
+    </div>
+
+    <!-- Tube feed details -->
+    <div class="conditional" id="cond-tube-feed">
+      <div class="section-label">Tube feed details</div>
+      <div class="field-grid-2">
+        <div class="field-group">
+          <label for="tf-carbs">Carbohydrate content (g/hour)</label>
+          <input type="number" id="tf-carbs" placeholder="e.g. 15" min="0" max="100" step="0.5" />
+          <div class="hint">From formula label (g CHO per hour running)</div>
+        </div>
+        <div class="field-group">
+          <label for="tf-rate">Rate (mL/hour)</label>
+          <input type="number" id="tf-rate" placeholder="e.g. 60" min="0" max="300" />
+        </div>
+      </div>
+    </div>
+
+    <!-- TPN details -->
+    <div class="conditional" id="cond-tpn">
+      <div class="section-label">TPN details</div>
+      <div class="field-grid-2">
+        <div class="field-group">
+          <label for="tpn-glucose-conc">Dextrose concentration (%)</label>
+          <input type="number" id="tpn-glucose-conc" placeholder="e.g. 25" min="0" max="70" step="0.5" />
+          <div class="hint">Standard TPN often 25%</div>
+        </div>
+        <div class="field-group">
+          <label for="tpn-rate">TPN rate (mL/hour)</label>
+          <input type="number" id="tpn-rate" placeholder="e.g. 100" min="0" max="300" />
+        </div>
+      </div>
+    </div>
+
+    <hr class="section-divider" />
+
+    <!-- Special circumstances -->
+    <div class="field-group">
+      <label>Special clinical circumstances (check all that apply)</label>
+      <div class="check-group">
+        <label class="check-option" id="chk-steroid-label">
+          <input type="checkbox" id="chk-steroid" />
+          <div>
+            <strong>Glucocorticoid (steroid) use</strong>
+            <span>Prednisone, dexamethasone, methylprednisolone, etc. — significantly ↑ post-prandial glucose</span>
+          </div>
+        </label>
+        <label class="check-option">
+          <input type="checkbox" id="chk-infection" />
+          <div>
+            <strong>Active infection / sepsis</strong>
+            <span>Infection ↑ insulin resistance and insulin needs</span>
+          </div>
+        </label>
+        <label class="check-option">
+          <input type="checkbox" id="chk-iv-transition" />
+          <div>
+            <strong>Transitioning from IV insulin infusion (drip)</strong>
+            <span>Calculate SQ doses from recent drip rate</span>
+          </div>
+        </label>
+        <label class="check-option">
+          <input type="checkbox" id="chk-hypoglycemia-risk" />
+          <div>
+            <strong>High hypoglycemia risk</strong>
+            <span>Elderly, frail, cognitive impairment, history of severe hypoglycemia, or unreliable eating</span>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <!-- Steroid conditional -->
+    <div class="conditional" id="cond-steroid">
+      <div class="section-label">Glucocorticoid details</div>
+      <div class="field-grid-2">
+        <div class="field-group">
+          <label for="steroid-type">Steroid type</label>
+          <select id="steroid-type">
+            <option value="prednisone_daily">Prednisone once daily (AM)</option>
+            <option value="dexamethasone_daily">Dexamethasone once or twice daily</option>
+            <option value="methylpred_daily">Methylprednisolone daily</option>
+            <option value="pulse">High-dose / pulse steroids</option>
+            <option value="other">Other / unknown</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label for="steroid-dose">Prednisone-equivalent dose (mg/day)</label>
+          <input type="number" id="steroid-dose" placeholder="e.g. 40" min="0" max="1000" />
+          <div class="hint">Leave blank if unknown</div>
+        </div>
+      </div>
+      <div class="info-box amber" style="margin-top:10px">
+        <span class="icon">⚠️</span>
+        <div>Steroids primarily ↑ <strong>post-prandial</strong> glucose with relatively preserved fasting levels. Nutritional (mealtime) insulin will need to be increased by approximately <strong>50%</strong>, with greatest effect seen in afternoon/evening for AM steroid dosing.</div>
+      </div>
+    </div>
+
+    <!-- IV transition conditional -->
+    <div class="conditional" id="cond-iv-transition">
+      <div class="section-label">IV insulin infusion details</div>
+      <div class="field-grid-2">
+        <div class="field-group">
+          <label for="iv-rate">Most recent infusion rate (units/hour)</label>
+          <input type="number" id="iv-rate" placeholder="e.g. 2.5" min="0" max="50" step="0.5" />
+        </div>
+        <div class="field-group">
+          <label for="iv-stable-hours">Hours at this rate (stable?)</label>
+          <input type="number" id="iv-stable-hours" placeholder="e.g. 6" min="0" max="72" />
+          <div class="hint">Rate should be stable ≥ 4–6 h before transition</div>
+        </div>
+      </div>
+      <div class="info-box blue" style="margin-top:10px">
+        <span class="icon">ℹ️</span>
+        <div>TDD from infusion = rate × 24 h. Use <strong>80%</strong> of that for safety. Give basal SQ <strong>1–2 h before</strong> discontinuing the drip.</div>
+      </div>
+    </div>
+
+    <div class="nav-row">
+      <button class="btn btn-secondary" onclick="goToStep(2)">← Back</button>
+      <button class="btn btn-primary" id="btn-step3-next" onclick="goToStep(4)">Next →</button>
+    </div>
+  </div>
+
+  <!-- ────────────────────────────────────────────────────────────
+       STEP 4 · Prior Day Data (Day 2+)
+  ──────────────────────────────────────────────────────────────── -->
+  <div class="step-card" id="step-4">
+    <div class="step-header">
+      <div class="step-icon">📋</div>
+      <div>
+        <h2>Prior Day Blood Glucose &amp; Doses</h2>
+        <p>Yesterday's readings and insulin given — used to adjust today's doses</p>
+      </div>
+    </div>
+
+    <div class="info-box blue">
+      <span class="icon">ℹ️</span>
+      <div>Enter all available values. Fields you leave blank will be skipped in the adjustment calculation. <strong>Use the actual administered doses</strong> (nutritional + correction combined).</div>
+    </div>
+
+    <div class="section-label">Yesterday's blood glucose readings (mg/dL)</div>
+    <div class="field-grid-2">
+      <div class="field-group">
+        <label for="bg-fasting-yday">Fasting / pre-breakfast BG</label>
+        <input type="number" id="bg-fasting-yday" placeholder="e.g. 165" min="40" max="600" />
+      </div>
+      <div class="field-group">
+        <label for="bg-prelunch-yday">Pre-lunch BG</label>
+        <input type="number" id="bg-prelunch-yday" placeholder="e.g. 210" min="40" max="600" />
+      </div>
+      <div class="field-group">
+        <label for="bg-predinner-yday">Pre-dinner BG</label>
+        <input type="number" id="bg-predinner-yday" placeholder="e.g. 188" min="40" max="600" />
+      </div>
+      <div class="field-group">
+        <label for="bg-bedtime-yday">Bedtime BG</label>
+        <input type="number" id="bg-bedtime-yday" placeholder="e.g. 195" min="40" max="600" />
+      </div>
+    </div>
+
+    <hr class="section-divider" />
+    <div class="section-label">Yesterday's insulin administered (units)</div>
+
+    <div class="field-grid-2">
+      <div class="field-group">
+        <label for="dose-basal-yday">Basal dose given</label>
+        <input type="number" id="dose-basal-yday" placeholder="e.g. 18" min="0" max="300" step="0.5" />
+        <div class="hint">Total units of long-acting insulin given yesterday</div>
+      </div>
+      <div class="field-group">
+        <label for="dose-breakfast-yday">Breakfast total (nutritional + correction)</label>
+        <input type="number" id="dose-breakfast-yday" placeholder="e.g. 6" min="0" max="100" step="0.5" />
+      </div>
+      <div class="field-group">
+        <label for="dose-lunch-yday">Lunch total (nutritional + correction)</label>
+        <input type="number" id="dose-lunch-yday" placeholder="e.g. 5" min="0" max="100" step="0.5" />
+      </div>
+      <div class="field-group">
+        <label for="dose-dinner-yday">Dinner total (nutritional + correction)</label>
+        <input type="number" id="dose-dinner-yday" placeholder="e.g. 7" min="0" max="100" step="0.5" />
+      </div>
+    </div>
+
+    <hr class="section-divider" />
+
+    <div class="field-group">
+      <label>Any hypoglycemia yesterday?</label>
+      <div class="radio-group" id="hypo-yday-group" style="flex-direction:row;flex-wrap:wrap;gap:10px">
+        <label class="radio-option" style="flex:1;min-width:130px">
+          <input type="radio" name="hypo_yday" value="none" checked />
+          <div><strong>None</strong></div>
+        </label>
+        <label class="radio-option" style="flex:1;min-width:130px">
+          <input type="radio" name="hypo_yday" value="mild" />
+          <div><strong>Mild</strong><span>BG 54–69, symptomatic, oral Rx</span></div>
+        </label>
+        <label class="radio-option" style="flex:1;min-width:130px">
+          <input type="radio" name="hypo_yday" value="severe" />
+          <div><strong>Severe</strong><span>BG &lt;54, IV dextrose required</span></div>
+        </label>
+      </div>
+    </div>
+
+    <div class="nav-row">
+      <button class="btn btn-secondary" onclick="goToStep(3)">← Back</button>
+      <button class="btn btn-primary" onclick="goToStep(5)">Next: Today's BGs →</button>
+    </div>
+  </div>
+
+  <!-- ────────────────────────────────────────────────────────────
+       STEP 5 · Today's Blood Glucose
+  ──────────────────────────────────────────────────────────────── -->
+  <div class="step-card" id="step-5">
+    <div class="step-header">
+      <div class="step-icon">🩸</div>
+      <div>
+        <h2>Today's Blood Glucose Readings</h2>
+        <p>Current values to inform correction and monitoring</p>
+      </div>
+    </div>
+
+    <div class="info-box blue">
+      <span class="icon">ℹ️</span>
+      <div>Enter today's available readings. At minimum, enter the <strong>most recent BG</strong> so a correction dose can be calculated. Target range: <strong>&lt;140–180 mg/dL</strong> pre-meal, <strong>&lt;200 mg/dL</strong> bedtime / 2 AM.</div>
+    </div>
+
+    <div class="field-grid-2">
+      <div class="field-group">
+        <label for="bg-fasting-today">Fasting / pre-breakfast BG today</label>
+        <input type="number" id="bg-fasting-today" placeholder="e.g. 152" min="40" max="600" />
+      </div>
+      <div class="field-group">
+        <label for="bg-prelunch-today">Pre-lunch BG today</label>
+        <input type="number" id="bg-prelunch-today" placeholder="e.g. 187" min="40" max="600" />
+      </div>
+      <div class="field-group">
+        <label for="bg-predinner-today">Pre-dinner BG today</label>
+        <input type="number" id="bg-predinner-today" placeholder="e.g. —" min="40" max="600" />
+      </div>
+      <div class="field-group">
+        <label for="bg-bedtime-today">Bedtime BG today</label>
+        <input type="number" id="bg-bedtime-today" placeholder="e.g. —" min="40" max="600" />
+      </div>
+    </div>
+
+    <div class="field-group" style="margin-top:6px">
+      <label for="bg-current">Most recent / current BG <span class="required">*</span></label>
+      <input type="number" id="bg-current" placeholder="e.g. 230" min="40" max="600" />
+      <div class="hint">Used for immediate correction dose calculation</div>
+      <div class="field-error" id="err-bg-current">Please enter the most recent blood glucose.</div>
+    </div>
+
+    <div class="field-group">
+      <label for="current-bg-context">Context of current BG</label>
+      <select id="current-bg-context">
+        <option value="fasting">Fasting / pre-breakfast</option>
+        <option value="pre_meal">Pre-meal (lunch or dinner)</option>
+        <option value="bedtime">Bedtime</option>
+        <option value="random">Random / other</option>
+      </select>
+    </div>
+
+    <div class="field-group">
+      <label>Hypoglycemia today?</label>
+      <div class="radio-group" id="hypo-today-group" style="flex-direction:row;flex-wrap:wrap;gap:10px">
+        <label class="radio-option" style="flex:1;min-width:130px">
+          <input type="radio" name="hypo_today" value="none" checked />
+          <div><strong>None</strong></div>
+        </label>
+        <label class="radio-option" style="flex:1;min-width:130px">
+          <input type="radio" name="hypo_today" value="mild" />
+          <div><strong>Mild</strong><span>BG 54–69</span></div>
+        </label>
+        <label class="radio-option" style="flex:1;min-width:130px">
+          <input type="radio" name="hypo_today" value="severe" />
+          <div><strong>Severe</strong><span>BG &lt;54, IV D50</span></div>
+        </label>
+      </div>
+    </div>
+
+    <div class="nav-row">
+      <button class="btn btn-secondary" id="btn-step5-back" onclick="goToStep(4)">← Back</button>
+      <button class="btn btn-success" onclick="calculate()">⚡ Generate Recommendations</button>
+    </div>
+  </div>
+
+  <!-- ────────────────────────────────────────────────────────────
+       STEP 6 · Results
+  ──────────────────────────────────────────────────────────────── -->
+  <div class="step-card" id="step-results">
+    <div class="results-header">
+      <div class="check-badge">📋</div>
+      <h2>Insulin Dosing Recommendations</h2>
+      <p id="results-subtitle">Basal · Nutritional · Correctional</p>
+    </div>
+
+    <!-- Dynamic content injected by JS -->
+    <div id="results-alerts"></div>
+    <div id="results-body"></div>
+
+    <div class="result-footer">
+      <strong>⚠️ Clinical Disclaimer</strong>
+      These recommendations are generated from published guidelines (Endotext NBK278972; Endocrine Society 2012; ADA 2019 Inpatient Standards) and are intended as decision support only. All orders must be reviewed by the responsible clinician. Adjust for clinical context, institutional protocols, and individual patient factors. Consult endocrinology for complex cases.
+    </div>
+
+    <div class="print-row">
+      <button class="btn btn-secondary" onclick="restartApp()">← Start Over</button>
+      <button class="btn btn-primary" onclick="window.print()">🖨️ Print / Save PDF</button>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+//  DISCLAIMER
+// ════════════════════════════════════════════════════════════════
+document.getElementById('agree-checkbox').addEventListener('change', function() {
+  document.getElementById('btn-accept').disabled = !this.checked;
+});
+document.getElementById('btn-accept').addEventListener('click', function() {
+  document.getElementById('disclaimer-overlay').style.display = 'none';
+});
+
+// ════════════════════════════════════════════════════════════════
+//  WIZARD STATE
+// ════════════════════════════════════════════════════════════════
+let currentStep = 1;
+
+const STEP_NAMES = {
+  1: 'Patient Info',
+  2: 'Home Regimen',
+  3: 'Hospital Status',
+  4: 'Prior Day Data',
+  5: "Today's BGs",
+};
+
+// Steps that can be skipped (Day 1 skips step 4)
+function getStepSequence() {
+  const day = document.getElementById('hospital-day').value;
+  if (day === '1') return [1, 2, 3, 5];
+  return [1, 2, 3, 4, 5];
+}
+
+function totalSteps() { return getStepSequence().length; }
+
+function stepIndexInSequence(stepNum) {
+  return getStepSequence().indexOf(stepNum);
+}
+
+// ════════════════════════════════════════════════════════════════
+//  PROGRESS BAR
+// ════════════════════════════════════════════════════════════════
+function updateProgress(stepNum) {
+  const seq = getStepSequence();
+  const idx = seq.indexOf(stepNum);
+  const total = seq.length;
+  const pct = idx < 0 ? 100 : Math.round((idx / total) * 100);
+
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-pct').textContent = pct + '%';
+  document.getElementById('step-count-label').textContent =
+    idx < 0 ? 'Results' : `Step ${idx + 1} of ${total}`;
+  document.getElementById('progress-step-name').textContent =
+    STEP_NAMES[stepNum] || 'Results';
+}
+
+// ════════════════════════════════════════════════════════════════
+//  STEP NAVIGATION
+// ════════════════════════════════════════════════════════════════
+function showStep(stepNum) {
+  // Hide all step cards and results
+  document.querySelectorAll('.step-card').forEach(c => c.classList.remove('active'));
+
+  if (stepNum === 'results') {
+    document.getElementById('step-results').classList.add('active');
+    updateProgress('results');
+  } else {
+    const card = document.getElementById('step-' + stepNum);
+    if (card) {
+      card.classList.add('active');
+      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    updateProgress(stepNum);
+  }
+  currentStep = stepNum;
+}
+
+function goToStep(targetStep) {
+  // Validate current step before moving forward
+  const seq = getStepSequence();
+  const currentIdx = seq.indexOf(currentStep);
+  const targetIdx  = seq.indexOf(targetStep);
+
+  if (targetIdx > currentIdx) {
+    if (!validateStep(currentStep)) return;
+  }
+
+  showStep(targetStep);
+}
+
+// ════════════════════════════════════════════════════════════════
+//  FORM VALIDATION
+// ════════════════════════════════════════════════════════════════
+function clearErrors() {
+  document.querySelectorAll('.field-error').forEach(e => e.classList.remove('show'));
+  document.querySelectorAll('.error').forEach(e => e.classList.remove('error'));
+}
+
+function showError(errId, inputEl) {
+  const errEl = document.getElementById(errId);
+  if (errEl) errEl.classList.add('show');
+  if (inputEl) inputEl.classList.add('error');
+}
+
+function validateStep(step) {
+  clearErrors();
+  let valid = true;
+
+  if (step === 1) {
+    const dmType = document.querySelector('input[name="dm_type"]:checked');
+    if (!dmType) { showError('err-dm-type', null); valid = false; }
+
+    const weight = document.getElementById('weight');
+    if (!weight.value || +weight.value <= 0) { showError('err-weight', weight); valid = false; }
+
+    const height = document.getElementById('height');
+    if (!height.value || +height.value <= 0) { showError('err-height', height); valid = false; }
+
+    const day = document.getElementById('hospital-day');
+    if (!day.value) { showError('err-hospital-day', day); valid = false; }
+  }
+
+  if (step === 2) {
+    const regimen = document.querySelector('input[name="home_regimen"]:checked');
+    if (!regimen) { showError('err-home-regimen', null); valid = false; }
+  }
+
+  if (step === 3) {
+    const nutrition = document.querySelector('input[name="nutrition"]:checked');
+    if (!nutrition) { showError('err-nutrition', null); valid = false; }
+  }
+
+  if (step === 5) {
+    const bgCurrent = document.getElementById('bg-current');
+    if (!bgCurrent.value || +bgCurrent.value < 40) { showError('err-bg-current', bgCurrent); valid = false; }
+  }
+
+  return valid;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  CONDITIONAL FIELD VISIBILITY
+// ════════════════════════════════════════════════════════════════
+
+// Step 2: show/hide insulin vs oral agent conditional panels
+document.querySelectorAll('input[name="home_regimen"]').forEach(radio => {
+  radio.addEventListener('change', function() {
+    updateHomeRegimenConditionals(this.value);
+    highlightSelected(this);
+  });
+});
+
+function updateHomeRegimenConditionals(value) {
+  const insulinTypes = ['basal_only', 'basal_bolus', 'premixed'];
+  const showInsulin = insulinTypes.includes(value);
+  const showOral    = value === 'oral';
+  const showBolus   = value === 'basal_bolus' || value === 'premixed';
+
+  toggleConditional('cond-home-insulin', showInsulin);
+  toggleConditional('cond-oral-agents',  showOral);
+  const bolusSection = document.getElementById('cond-bolus-section');
+  if (bolusSection) bolusSection.style.display = showBolus ? 'block' : 'none';
+}
+
+// Step 3: nutrition conditionals
+document.querySelectorAll('input[name="nutrition"]').forEach(radio => {
+  radio.addEventListener('change', function() {
+    updateNutritionConditionals(this.value);
+    highlightSelected(this);
+  });
+});
+
+function updateNutritionConditionals(value) {
+  toggleConditional('cond-tube-feed', value === 'tube_feeds');
+  toggleConditional('cond-tpn',       value === 'tpn');
+}
+
+// Step 3: special checkboxes
+document.getElementById('chk-steroid').addEventListener('change', function() {
+  toggleConditional('cond-steroid', this.checked);
+  updateCheckOption(this);
+});
+document.getElementById('chk-iv-transition').addEventListener('change', function() {
+  toggleConditional('cond-iv-transition', this.checked);
+  updateCheckOption(this);
+});
+document.querySelectorAll('.check-option input[type=checkbox]').forEach(chk => {
+  chk.addEventListener('change', function() { updateCheckOption(this); });
+});
+
+// BMI auto-calculator
+['weight', 'height'].forEach(id => {
+  document.getElementById(id).addEventListener('input', computeBMI);
+});
+
+function computeBMI() {
+  const w = parseFloat(document.getElementById('weight').value);
+  const h = parseFloat(document.getElementById('height').value) / 100;
+  const display = document.getElementById('bmi-display');
+  const text    = document.getElementById('bmi-text');
+
+  if (w > 0 && h > 0) {
+    const bmi = (w / (h * h)).toFixed(1);
+    let cat = '';
+    if      (bmi < 18.5) cat = 'Underweight';
+    else if (bmi < 25)   cat = 'Normal weight';
+    else if (bmi < 30)   cat = 'Overweight';
+    else                 cat = 'Obese';
+
+    let ssCol = bmi < 18.5 ? 'Low-dose scale (Column A)' : bmi <= 25 ? 'Standard scale (Column B)' : 'High-dose scale (Column C)';
+
+    text.innerHTML = `<strong>BMI: ${bmi} kg/m²</strong> — ${cat}<br>
+      <span style="font-size:0.78rem">Sliding scale column: <strong>${ssCol}</strong></span>`;
+    display.style.display = 'flex';
+  } else {
+    display.style.display = 'none';
+  }
+}
+
+// Radio highlight helper
+function highlightSelected(input) {
+  const group = input.closest('.radio-group, .check-group');
+  if (!group) return;
+  group.querySelectorAll('.radio-option, .check-option').forEach(opt => {
+    opt.classList.remove('selected');
+  });
+  if (input.type === 'radio') {
+    input.closest('.radio-option').classList.add('selected');
+  }
+}
+
+function updateCheckOption(input) {
+  const opt = input.closest('.check-option');
+  if (!opt) return;
+  if (input.checked) opt.classList.add('selected');
+  else               opt.classList.remove('selected');
+}
+
+function toggleConditional(id, show) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('visible', show);
+}
+
+// All radio inputs get highlight behavior
+document.querySelectorAll('.radio-option input[type=radio]').forEach(r => {
+  r.addEventListener('change', function() { highlightSelected(this); });
+});
+
+// Step 5 back button: skip step 4 if Day 1
+document.getElementById('btn-step5-back').addEventListener('click', function(e) {
+  e.stopPropagation();
+  const day = document.getElementById('hospital-day').value;
+  goToStep(day === '1' ? 3 : 4);
+}, true);
+
+// Step 3 next: skip step 4 if Day 1
+document.getElementById('btn-step3-next').addEventListener('click', function(e) {
+  e.stopPropagation();
+  if (!validateStep(3)) return;
+  const day = document.getElementById('hospital-day').value;
+  showStep(day === '1' ? 5 : 4);
+}, true);
+
+// ════════════════════════════════════════════════════════════════
+//  DATA COLLECTION HELPERS
+// ════════════════════════════════════════════════════════════════
+function val(id) {
+  const el = document.getElementById(id);
+  return el ? el.value.trim() : '';
+}
+
+function numVal(id) {
+  const v = parseFloat(val(id));
+  return isNaN(v) ? null : v;
+}
+
+function checked(id) {
+  const el = document.getElementById(id);
+  return el ? el.checked : false;
+}
+
+function radioVal(name) {
+  const el = document.querySelector(`input[name="${name}"]:checked`);
+  return el ? el.value : null;
+}
+
+function collectData() {
+  const weight = numVal('weight');
+  const height = numVal('height') / 100;
+  const bmi    = weight && height ? +(weight / (height * height)).toFixed(1) : null;
+
+  return {
+    // Step 1
+    dmType:       radioVal('dm_type'),
+    weight,
+    heightCm:     numVal('height'),
+    bmi,
+    hospitalDay:  parseInt(val('hospital-day')) || 1,
+    renalStatus:  val('renal-status'),
+
+    // Step 2
+    homeRegimen:      radioVal('home_regimen'),
+    homeA1c:          numVal('home-a1c'),
+    homeControl:      val('home-control'),
+    homeBasalType:    val('home-basal-type'),
+    homeBasalDose:    numVal('home-basal-dose'),
+    homeBolusDose:    numVal('home-bolus-dose'),
+    homeBolusType:    val('home-bolus-type'),
+
+    // Step 3
+    nutrition:        radioVal('nutrition'),
+    tfCarbsPerHr:     numVal('tf-carbs'),
+    tpnGlucoseConc:   numVal('tpn-glucose-conc'),
+    tpnRate:          numVal('tpn-rate'),
+    onSteroid:        checked('chk-steroid'),
+    steroidType:      val('steroid-type'),
+    steroidDose:      numVal('steroid-dose'),
+    onInfection:      checked('chk-infection'),
+    ivTransition:     checked('chk-iv-transition'),
+    ivRate:           numVal('iv-rate'),
+    ivStableHours:    numVal('iv-stable-hours'),
+    highHypoRisk:     checked('chk-hypoglycemia-risk'),
+
+    // Step 4 (prior day)
+    bgFastingYday:    numVal('bg-fasting-yday'),
+    bgPrelunchYday:   numVal('bg-prelunch-yday'),
+    bgPredinnerYday:  numVal('bg-predinner-yday'),
+    bgBedtimeYday:    numVal('bg-bedtime-yday'),
+    doseBasalYday:    numVal('dose-basal-yday'),
+    doseBreakfastYday:numVal('dose-breakfast-yday'),
+    doseLunchYday:    numVal('dose-lunch-yday'),
+    doseDinnerYday:   numVal('dose-dinner-yday'),
+    hypoYday:         radioVal('hypo_yday') || 'none',
+
+    // Step 5 (today)
+    bgFastingToday:   numVal('bg-fasting-today'),
+    bgPrelunchToday:  numVal('bg-prelunch-today'),
+    bgPredinnerToday: numVal('bg-predinner-today'),
+    bgBedtimeToday:   numVal('bg-bedtime-today'),
+    bgCurrent:        numVal('bg-current'),
+    bgCurrentContext: val('current-bg-context'),
+    hypoToday:        radioVal('hypo_today') || 'none',
+  };
+}
+
+// ════════════════════════════════════════════════════════════════
+//  ENTRY POINT — wired to "Generate Recommendations" button
+// ════════════════════════════════════════════════════════════════
+function calculate() {
+  if (!validateStep(5)) return;
+  const data = collectData();
+  const recs = computeRecommendations(data);
+  renderResults(data, recs);
+  showStep('results');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function restartApp() { location.reload(); }
+
+// ════════════════════════════════════════════════════════════════
+//  CLINICAL ENGINE
+//  Sources: Endotext NBK278972 · Endocrine Society 2012 · ADA 2019
+// ════════════════════════════════════════════════════════════════
+
+// ── Sliding Scale Table 1 (lispro/aspart/glulisine or regular) ──
+// Columns: [low-BMI <18.5, moderate 18.5-25, high >25, bedtime]
+const SS_TABLE = [
+  { bgMin: 131, bgMax: 150, doses: [0,  1,  2,  0] },
+  { bgMin: 151, bgMax: 200, doses: [1,  2,  3,  0] },
+  { bgMin: 201, bgMax: 250, doses: [2,  4,  6,  1] },
+  { bgMin: 251, bgMax: 300, doses: [3,  6,  9,  2] },
+  { bgMin: 301, bgMax: 350, doses: [4,  8, 12,  3] },
+  { bgMin: 351, bgMax: 400, doses: [5, 10, 15,  3] },
+  { bgMin: 401, bgMax: 999, doses: [6, 12, 18,  3] },
+];
+
+function getSsColumn(bmi) {
+  if (!bmi || bmi < 18.5) return 0;       // low
+  if (bmi <= 25)          return 1;       // moderate
+  return 2;                               // high
+}
+
+// ── Lookup correction dose for a given BG and context ──
+function getCorrectionDose(bg, bmi, isBedtime) {
+  if (!bg || bg <= 130) return 0;
+  const col = isBedtime ? 3 : getSsColumn(bmi);
+  for (const row of SS_TABLE) {
+    if (bg >= row.bgMin && bg <= row.bgMax) return row.doses[col];
+  }
+  return 0;
+}
+
+// ── Round to nearest 0.5 units (clinical precision) ──
+function r(n) { return Math.round(n * 2) / 2; }
+
+// ── Renal safety modifier ──
+function renalFactor(renalStatus) {
+  // Renal insufficiency ↓ insulin clearance → reduce doses
+  if (renalStatus === 'severe' || renalStatus === 'esrd') return 0.7;
+  if (renalStatus === 'moderate') return 0.85;
+  return 1.0;
+}
+
+// ── Hypoglycemia safety modifier ──
+function hypoSafetyFactor(hypoYday, hypoToday, highHypoRisk) {
+  if (hypoToday === 'severe' || hypoYday === 'severe') return 0.6;
+  if (hypoToday === 'mild'   || hypoYday === 'mild')   return 0.8;
+  if (highHypoRisk)                                    return 0.85;
+  return 1.0;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  MAIN CALCULATION
+// ════════════════════════════════════════════════════════════════
+function computeRecommendations(d) {
+  const recs = {
+    alerts:        [],   // {level: 'danger'|'warning'|'info', icon, msg}
+    scenario:      '',
+    basal:         null, // {dose, type, timing, rationale, adjustment, adjustReason}
+    nutritional:   null, // {perMeal, totalDaily, type, timing, rationale} or null if NPO
+    correctional:  null, // {column, isBedtime, currentCorrDose, table}
+    monitoring:    [],
+    specialNotes:  [],
+  };
+
+  const rf  = renalFactor(d.renalStatus);
+  const hf  = hypoSafetyFactor(d.hypoYday, d.hypoToday, d.highHypoRisk);
+  const bmi = d.bmi;
+  const wt  = d.weight;
+
+  // ── Safety: T1DM + NPO warning ────────────────────────────────
+  if (d.dmType === 'T1DM') {
+    recs.alerts.push({
+      level: 'danger',
+      icon:  '🚨',
+      msg:   '<strong>Type 1 DM:</strong> Patient ALWAYS requires exogenous basal insulin, even when NPO. Withholding basal insulin in a T1DM patient can cause DKA within hours.'
+    });
+  }
+
+  // ── Hypoglycemia alerts ───────────────────────────────────────
+  if (d.hypoToday === 'severe') {
+    recs.alerts.push({ level: 'danger', icon: '⚠️',
+      msg: '<strong>Severe hypoglycemia today (BG &lt;54):</strong> Doses are reduced by ~40%. Hold nutritional insulin if eating is unreliable. Reassess cause and consider endocrinology consult.' });
+  } else if (d.hypoToday === 'mild' || d.hypoYday === 'mild') {
+    recs.alerts.push({ level: 'warning', icon: '⚠️',
+      msg: '<strong>Recent hypoglycemia:</strong> Doses are reduced by ~20%. Ensure meals are consistently eaten before giving nutritional insulin. Set a lower BG threshold for correction.' });
+  } else if (d.hypoYday === 'severe') {
+    recs.alerts.push({ level: 'danger', icon: '⚠️',
+      msg: '<strong>Severe hypoglycemia yesterday (BG &lt;54):</strong> Significant dose reduction applied. IV dextrose protocol should be in place. Consider endocrinology.' });
+  }
+
+  // ── Renal alert ───────────────────────────────────────────────
+  if (d.renalStatus === 'severe' || d.renalStatus === 'esrd') {
+    recs.alerts.push({ level: 'warning', icon: '🔬',
+      msg: '<strong>Severe renal impairment / ESRD:</strong> Insulin clearance is significantly reduced. Doses reduced by ~30%. Monitor closely for prolonged hypoglycemia. Prefer shorter-acting insulins where possible.' });
+  } else if (d.renalStatus === 'moderate') {
+    recs.alerts.push({ level: 'warning', icon: '🔬',
+      msg: '<strong>Moderate renal impairment (eGFR 30–44):</strong> Doses reduced by ~15% due to decreased insulin clearance.' });
+  }
+
+  // ── NPO surgical / ICU ────────────────────────────────────────
+  if (d.nutrition === 'npo_surgery_icu') {
+    recs.alerts.push({ level: 'warning', icon: '🏥',
+      msg: '<strong>Surgical / ICU patient NPO:</strong> IV insulin infusion should be strongly considered per institutional protocol. This tool provides SQ insulin guidance only and is not a substitute for a standardized insulin drip protocol.' });
+  }
+
+  // ── Oral agents hold ──────────────────────────────────────────
+  if (d.homeRegimen === 'oral' || d.homeRegimen === 'non_insulin_injectable') {
+    recs.alerts.push({ level: 'info', icon: 'ℹ️',
+      msg: '<strong>Oral agents / GLP-1:</strong> Metformin (renal/contrast risk), sulfonylureas (hypoglycemia risk when NPO), SGLT-2 inhibitors (euglycemic DKA risk), and GLP-1 agonists should generally be held during hospitalization. DPP-4 inhibitors may be continued if glucose is minimally elevated and the patient is eating.' });
+  }
+
+  // ── Steroid alert ─────────────────────────────────────────────
+  if (d.onSteroid) {
+    recs.alerts.push({ level: 'warning', icon: '💊',
+      msg: `<strong>Glucocorticoid use:</strong> Steroids primarily elevate <em>post-prandial</em> glucose with less effect on fasting levels. Nutritional (mealtime) insulin doses are increased by ~50%. Glucose may be highest in the afternoon/evening, especially with once-daily AM steroid dosing. Monitor BG q4–6h.` });
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  //  SCENARIO ROUTING
+  // ════════════════════════════════════════════════════════════════
+
+  if (d.ivTransition && d.ivRate) {
+    // ── IV → SQ TRANSITION ──────────────────────────────────────
+    recs.scenario = 'IV-to-SQ Transition';
+    const tddFromDrip = d.ivRate * 24;
+    const safeTdd     = r(tddFromDrip * 0.80 * rf * hf);
+    const basalDose   = r(safeTdd * 0.5);
+    const perMeal     = d.nutrition === 'eating' || d.nutrition === 'poor_appetite'
+                        ? r((safeTdd * 0.5) / 3) : null;
+    const tfDose      = d.nutrition === 'tube_feeds' ? r(safeTdd * 0.5 / 10) : null;
+
+    recs.basal = {
+      dose:     basalDose,
+      type:     'Glargine (or detemir)',
+      timing:   'Give 1–2 hours BEFORE discontinuing IV infusion',
+      rationale:`IV rate ${d.ivRate} u/hr × 24 h = ${r(tddFromDrip)} u/day TDD. 80% safety factor → ${safeTdd} u/day. Basal = 50% of that.`,
+    };
+
+    if (perMeal !== null) {
+      recs.nutritional = {
+        perMeal,
+        totalDaily: r(perMeal * 3),
+        type:       'Rapid-acting (lispro / aspart / glulisine)',
+        timing:     'With each meal',
+        rationale:  `50% of safe TDD (${r(safeTdd * 0.5)} u) divided by 3 meals.`,
+      };
+    } else if (tfDose !== null) {
+      recs.nutritional = {
+        perMeal:    tfDose,
+        totalDaily: null,
+        type:       'Rapid-acting q4h while tube feeds running',
+        timing:     'Every 4 hours while tube feed is active',
+        rationale:  `50% of safe TDD divided by 10 for tube-feed nutritional dosing.`,
+      };
+    }
+
+    if (d.ivStableHours && d.ivStableHours < 4) {
+      recs.alerts.push({ level: 'warning', icon: '⏱️',
+        msg: `<strong>Drip not yet stable:</strong> The infusion rate has only been stable for ${d.ivStableHours} hour(s). Best practice is ≥4–6 h of rate stability before transitioning to SQ insulin.` });
+    }
+
+  } else if (d.nutrition === 'tpn') {
+    // ── TPN ─────────────────────────────────────────────────────
+    recs.scenario = 'TPN';
+    const glucoseGramPerHr = d.tpnGlucoseConc && d.tpnRate
+                             ? (d.tpnGlucoseConc / 100) * d.tpnRate
+                             : null;
+    const glucoseGramPerDay = glucoseGramPerHr ? r(glucoseGramPerHr * 24) : null;
+    // 0.1 unit per gram glucose as starting point
+    const tpnInsulin = glucoseGramPerDay ? r(glucoseGramPerDay * 0.1 * rf * hf) : null;
+
+    recs.basal = {
+      dose:     tpnInsulin,
+      type:     'Regular insulin added to TPN bag',
+      timing:   'In TPN — start with 0.1 u/g dextrose; adjust daily',
+      rationale: glucoseGramPerDay
+        ? `TPN glucose: ${d.tpnGlucoseConc}% × ${d.tpnRate} mL/h = ${r(glucoseGramPerHr)} g/h × 24 = ${glucoseGramPerDay} g/day. At 0.1 u/g = ${tpnInsulin} u/day in bag.`
+        : 'Enter TPN concentration and rate for a calculated dose. Start at 0.1 u/g dextrose.',
+    };
+    recs.nutritional = null;
+    recs.specialNotes.push('Add insulin directly to TPN bag — unexpected TPN discontinuation will also stop insulin, reducing hypoglycemia risk.');
+    recs.specialNotes.push('Check BG q4–6h. Titrate insulin in TPN bag by 2–4 units/day based on pattern.');
+    recs.specialNotes.push('Correction-only sliding scale SQ while TPN running.');
+
+  } else if (d.nutrition === 'tube_feeds') {
+    // ── CONTINUOUS TUBE FEEDS ────────────────────────────────────
+    recs.scenario = 'Continuous Tube Feeds';
+    let tdd = null;
+    let tddSource = '';
+
+    if (d.tfCarbsPerHr) {
+      // 1 unit per 10 g CHO
+      const dailyCHO = d.tfCarbsPerHr * 24;
+      tdd = r(dailyCHO / 10 * rf * hf);
+      tddSource = `CHO ${d.tfCarbsPerHr} g/h × 24 = ${r(dailyCHO)} g/day; 1 u/10 g = ${r(dailyCHO/10)} u, adjusted.`;
+    } else if (wt) {
+      // Fallback: weight-based estimate
+      const baseTdd = d.dmType === 'T1DM' ? wt * 0.4 : wt * 0.5;
+      tdd = r(baseTdd * rf * hf);
+      tddSource = `Weight-based estimate (${d.dmType === 'T1DM' ? '0.4' : '0.5'} u/kg × ${wt} kg).`;
+    }
+
+    const basalDose = tdd ? r(tdd / 2) : null;
+    const q4Dose    = tdd ? r(tdd / 2 / 10) : null;
+
+    recs.basal = {
+      dose:     basalDose,
+      type:     'Glargine (or detemir)',
+      timing:   'Once daily',
+      rationale:`${tddSource} Basal = 50% of TDD.`,
+    };
+    recs.nutritional = {
+      perMeal:    q4Dose,
+      totalDaily: null,
+      type:       'Rapid-acting (lispro / aspart / glulisine) or Regular',
+      timing:     'Every 4 hours while tube feeds are running',
+      rationale:  'Nutritional = 50% of TDD ÷ 10 for q4h dosing.',
+    };
+    recs.specialNotes.push('If tube feeds are held or rate changes, adjust nutritional insulin proportionally or hold until feeds resume.');
+    recs.specialNotes.push('Check BG q4–6h while on tube feeds.');
+
+  } else if (d.nutrition === 'npo_procedure' || d.nutrition === 'npo_surgery_icu') {
+    // ── NPO ──────────────────────────────────────────────────────
+    recs.scenario = 'NPO';
+    let basalDose = null;
+    let basalNote = '';
+
+    if (d.homeRegimen === 'basal_bolus' || d.homeRegimen === 'basal_only') {
+      // Based on home dose
+      const homeBD = d.homeBasalDose;
+      if (homeBD) {
+        if (d.homeBasalType === 'nph') {
+          // Morning NPH: ↓50%, Bedtime NPH: usual
+          basalDose = r(homeBD * 0.5 * rf * hf);
+          basalNote = `Home NPH dose (${homeBD} u) × 50% for morning NPO. If bedtime NPH, give usual dose.`;
+        } else {
+          // Glargine / detemir: ↓25%
+          basalDose = r(homeBD * 0.75 * rf * hf);
+          basalNote = `Home ${d.homeBasalType || 'basal'} (${homeBD} u) × 75% (↓25%) for NPO.`;
+        }
+      } else {
+        basalDose = wt ? r(wt * 0.2 * rf * hf) : null;
+        basalNote = 'Home dose unknown; estimated at 0.2 u/kg.';
+      }
+    } else if (d.hospitalDay >= 2 && d.doseBasalYday) {
+      // Adjust from yesterday's prior hospital dose
+      const prevBasal = d.doseBasalYday;
+      basalDose = r(prevBasal * 0.75 * rf * hf);
+      basalNote = `Prior day basal (${prevBasal} u) × 75% for NPO.`;
+    } else {
+      // Fresh start
+      basalDose = wt ? r(wt * 0.2 * rf * hf) : null;
+      basalNote = 'Starting estimate: 0.2 u/kg.';
+    }
+
+    // T1DM always needs basal even NPO
+    recs.basal = {
+      dose:     basalDose,
+      type:     d.homeBasalType === 'nph' ? 'NPH' : 'Glargine (preferred) or detemir',
+      timing:   'Continue scheduled basal; DO NOT give nutritional insulin while NPO',
+      rationale: basalNote,
+    };
+    recs.nutritional = null;
+    recs.specialNotes.push('Hold ALL nutritional (mealtime) insulin while patient is NPO.');
+    recs.specialNotes.push('Continue correctional sliding scale for hyperglycemia.');
+    recs.specialNotes.push('Type 1 DM: NEVER withhold basal insulin, even when NPO.');
+    recs.specialNotes.push('Resume nutritional insulin when patient is eating again, titrating to intake.');
+
+  } else {
+    // ── EATING PATIENTS (main basal-bolus pathway) ───────────────
+    const isDay1 = d.hospitalDay === 1;
+
+    // ── Determine base TDD ───────────────────────────────────────
+    let tdd = null, tddSource = '';
+
+    if (d.homeRegimen === 'basal_bolus' && d.homeBasalDose && d.homeBolusDose) {
+      const homeTdd = d.homeBasalDose + d.homeBolusDose;
+      if (d.homeControl === 'well') {
+        // Continue home regimen with 20–30% reduction for in-hospital safety
+        tdd = r(homeTdd * 0.75 * rf * hf);
+        tddSource = `Home TDD (${homeTdd} u) × 75% (↓25% for in-hospital safety).`;
+      } else {
+        tdd = r(homeTdd * 0.80 * rf * hf);
+        tddSource = `Home TDD (${homeTdd} u) × 80%.`;
+      }
+    } else if (d.homeRegimen === 'basal_only' && d.homeBasalDose) {
+      const homeTdd = d.homeBasalDose;
+      tdd = r(homeTdd * 0.75 * rf * hf);
+      tddSource = `Home basal (${homeTdd} u) × 75% as estimated TDD.`;
+    } else if (d.homeRegimen === 'premixed' && d.homeBasalDose) {
+      tdd = r(d.homeBasalDose * 0.80 * rf * hf);
+      tddSource = `Premixed home dose (${d.homeBasalDose} u/day) × 80%.`;
+    } else {
+      // Weight-based starting dose
+      let baseRate = 0.4; // T1DM
+      if (d.dmType === 'T2DM' || d.homeRegimen === 'oral') baseRate = 0.5;
+      if (d.dmType === 'stress') baseRate = 0.3;
+      tdd = wt ? r(wt * baseRate * rf * hf) : null;
+      tddSource = `Weight-based estimate (${baseRate} u/kg × ${wt} kg).`;
+    }
+
+    // ── Basal (50% of TDD) ───────────────────────────────────────
+    let basalDose   = tdd ? r(tdd * 0.5) : null;
+    let basalAdj    = 0;
+    let basalAdjReason = '';
+
+    if (!isDay1 && d.bgFastingToday !== null) {
+      const fbg = d.bgFastingToday;
+      if (fbg < 140) {
+        basalAdj = 0; basalAdjReason = `Fasting BG ${fbg} — at goal (<140). No change.`;
+      } else if (fbg <= 160) {
+        basalAdj = 2; basalAdjReason = `Fasting BG ${fbg} (141–160) → increase basal by 2–3 u.`;
+      } else if (fbg <= 180) {
+        basalAdj = 4; basalAdjReason = `Fasting BG ${fbg} (161–180) → increase basal by 4–5 u.`;
+      } else if (fbg <= 200) {
+        basalAdj = 6; basalAdjReason = `Fasting BG ${fbg} (181–200) → increase basal by 6–7 u.`;
+      } else {
+        basalAdj = 8; basalAdjReason = `Fasting BG ${fbg} (>200) → increase basal by 8 u.`;
+      }
+
+      // Override adjustment from yesterday's actual dose if available
+      if (d.doseBasalYday !== null && basalDose !== null) {
+        basalDose = r(d.doseBasalYday + basalAdj);
+        basalAdjReason = `Prior day basal: ${d.doseBasalYday} u + ${basalAdj} u adjustment. ${basalAdjReason}`;
+      } else if (basalDose !== null) {
+        basalDose = r(basalDose + basalAdj);
+      }
+    }
+
+    // Steroid: primarily affects nutritional (not basal adjustment needed here)
+    // Infection: increase overall TDD
+    let infectionNote = '';
+    if (d.onInfection && tdd) {
+      const infAdj = r(tdd * 0.1);
+      infectionNote = `Active infection: ~10% additional insulin requirement factored in.`;
+    }
+
+    // Determine basal timing
+    let basalType   = 'Glargine (Lantus/Basaglar) — preferred';
+    let basalTiming = 'Once daily, same time each day (bedtime preferred)';
+    if (d.homeBasalType === 'nph') {
+      basalType   = 'NPH';
+      basalTiming = 'Twice daily (bedtime + morning) or bedtime only';
+    } else if (d.homeBasalType === 'detemir') {
+      basalType   = 'Detemir (Levemir)';
+      basalTiming = 'Once or twice daily';
+    } else if (d.homeBasalType === 'degludec') {
+      basalType   = 'Degludec (Tresiba)';
+      basalTiming = 'Once daily';
+    }
+
+    recs.basal = {
+      dose:        basalDose,
+      type:        basalType,
+      timing:      basalTiming,
+      rationale:   tddSource + (basalAdjReason ? ' ' + basalAdjReason : ''),
+      adjustment:  basalAdj,
+      adjustReason: basalAdjReason,
+    };
+
+    // ── Nutritional (mealtime) insulin (50% of TDD ÷ 3 meals) ───
+    let perMeal    = tdd ? r((tdd * 0.5) / 3) : null;
+    let nutRationale = '';
+    let steroidBoost = false;
+
+    // Steroid: emphasize nutritional +50%
+    if (d.onSteroid && perMeal) {
+      perMeal = r(perMeal * 1.5);
+      steroidBoost = true;
+      nutRationale = 'Steroid use: nutritional insulin increased by ~50% to address post-prandial hyperglycemia. ';
+    }
+
+    // Poor appetite: reduce nutritional
+    let poorAppNote = '';
+    if (d.nutrition === 'poor_appetite') {
+      perMeal = perMeal ? r(perMeal * 0.6) : null;
+      poorAppNote = 'Poor appetite: nutritional insulin reduced by ~40%. Consider post-meal dosing based on amount eaten.';
+    }
+
+    // Day 2+ nutritional adjustment using BG trends
+    if (!isDay1) {
+      // Adjust breakfast bolus based on pre-lunch BG trend
+      let nutAdj = 0, nutAdjReason = '';
+      if (d.bgFastingYday !== null && d.bgPrelunchYday !== null && d.doseBreakfastYday !== null) {
+        const delta = d.bgPrelunchYday - d.bgFastingYday;
+        if (delta > 50 && d.bgPrelunchYday > 150) {
+          // BG significantly rose — increase tomorrow's breakfast nutritional = total dose given + a bit
+          nutAdj = r(d.doseBreakfastYday + 2);
+          nutAdjReason = `Pre-lunch BG (${d.bgPrelunchYday}) was significantly higher than pre-breakfast (${d.bgFastingYday}); breakfast dose was ${d.doseBreakfastYday} u → use ${nutAdj} u as breakfast nutritional tomorrow.`;
+        } else if (d.bgPrelunchYday < 80) {
+          // Hypoglycemia before lunch — reduce
+          nutAdj = r(Math.max((d.doseBreakfastYday || perMeal) - 2, 1));
+          nutAdjReason = `Pre-lunch BG was low (${d.bgPrelunchYday} mg/dL); reduce breakfast nutritional dose.`;
+        } else {
+          nutAdj = d.doseBreakfastYday; // Use yesterday's total as tomorrow's nutritional
+          nutAdjReason = `Pre-lunch BG at goal; use yesterday's total breakfast dose (${d.doseBreakfastYday} u) as tomorrow's nutritional dose.`;
+        }
+        if (nutAdj) perMeal = r(nutAdj * rf * hf);
+      }
+      nutRationale += nutAdjReason;
+    }
+
+    let bolusType = 'Rapid-acting: lispro (Humalog) / aspart (NovoLog) / glulisine (Apidra)';
+    if (d.homeBolusType === 'regular') bolusType = 'Regular insulin';
+    let bolusTiming = 'Immediately before meals (rapid-acting) or 30 min before (regular)';
+    if (d.nutrition === 'poor_appetite') {
+      bolusTiming = 'Administer AFTER meals, dose based on amount eaten (reduce for partial meals)';
+    }
+
+    recs.scenario = isDay1 ? 'Day 1 Initiation' : `Day ${d.hospitalDay} Adjustment`;
+
+    recs.nutritional = (d.nutrition === 'npo_procedure' || d.nutrition === 'npo_surgery_icu')
+      ? null
+      : {
+          perMeal:    perMeal,
+          totalDaily: perMeal ? r(perMeal * 3) : null,
+          type:       bolusType,
+          timing:     bolusTiming,
+          rationale:  (nutRationale || `50% of TDD (${tdd ? r(tdd*0.5) : '?'} u) ÷ 3 meals.`)
+                       + (poorAppNote ? ' ' + poorAppNote : '')
+                       + (infectionNote ? ' ' + infectionNote : ''),
+          steroidBoost,
+        };
+
+    // Day 1 oral / diet patients → only sliding scale on Day 1
+    if (isDay1 && (d.homeRegimen === 'diet' || d.homeRegimen === 'oral')) {
+      recs.scenario = 'Day 1 – Diet/Oral Agent Patient';
+      recs.basal = null;  // Start with correction only; add basal Day 2 if fasting BG > 150
+      recs.nutritional = null;
+      recs.specialNotes.push('Day 1: Use correctional sliding scale only. Monitor fasting BG.');
+      recs.specialNotes.push('Day 2: If fasting BG > 150 mg/dL, add bedtime basal glargine at 0.1–0.2 u/kg.');
+      recs.specialNotes.push('Day 2: If pre-meal BGs > 150 mg/dL, add nutritional insulin at 0.1–0.2 u/kg/day divided by 3 meals.');
+    }
+  }
+
+  // ── Correctional sliding scale (always, except TPN—separate) ──
+  const isBedtime = d.bgCurrentContext === 'bedtime';
+  const corrDose  = getCorrectionDose(d.bgCurrent, bmi, isBedtime);
+  recs.correctional = {
+    column:          getSsColumn(bmi),
+    isBedtime,
+    currentBg:       d.bgCurrent,
+    currentCorrDose: corrDose,
+    table:           SS_TABLE,
+    bmi,
+  };
+
+  // ── Monitoring plan ────────────────────────────────────────────
+  const isNpo = d.nutrition === 'npo_procedure' || d.nutrition === 'npo_surgery_icu';
+  const isTF  = d.nutrition === 'tube_feeds';
+  const isTPN = d.nutrition === 'tpn';
+
+  if (isNpo || isTF || isTPN) {
+    recs.monitoring.push('Blood glucose every 4–6 hours (qid or q6h).');
+  } else {
+    recs.monitoring.push('Blood glucose before each meal and at bedtime (qid AC+HS).');
+  }
+  if (d.onSteroid) {
+    recs.monitoring.push('Additional BG check 4–6 hours after steroid dose (peak effect on post-prandial glucose).');
+  }
+  recs.monitoring.push('Hold nutritional insulin if patient is not eating or meal is significantly reduced.');
+  recs.monitoring.push('For BG < 70 mg/dL: if patient can take PO, give 15–20 g fast-acting carbohydrate (glucose tabs or 6 oz juice). If NPO, give 25 mL D50 IV push. Recheck BG every 15 min until ≥ 100 mg/dL.');
+  recs.monitoring.push('Notify provider for BG < 70 or > 300 mg/dL.');
+  if (d.dmType === 'T1DM') {
+    recs.monitoring.push('T1DM: Check urine/serum ketones if BG > 250 mg/dL or patient feels unwell. Absent basal insulin → DKA risk.');
+  }
+
+  return recs;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  RENDERER
+// ════════════════════════════════════════════════════════════════
+function renderResults(d, recs) {
+  const alertsEl = document.getElementById('results-alerts');
+  const bodyEl   = document.getElementById('results-body');
+  const subtitle = document.getElementById('results-subtitle');
+
+  subtitle.textContent = `${d.dmType || ''} · ${recs.scenario || ''} · ${
+    d.nutrition ? d.nutrition.replace('_', ' ') : ''} · Day ${d.hospitalDay}`;
+
+  // ── Alerts ────────────────────────────────────────────────────
+  alertsEl.innerHTML = recs.alerts.map(a =>
+    `<div class="alert-banner ${a.level}">
+       <span class="alert-icon">${a.icon}</span>
+       <div>${a.msg}</div>
+     </div>`
+  ).join('');
+
+  // ── Build body ────────────────────────────────────────────────
+  let html = '';
+
+  // ─ Basal ─────────────────────────────────────────────────────
+  html += `<div class="result-section">
+    <div class="result-section-header">🌙 Basal Insulin</div>
+    <div class="result-section-body">`;
+
+  if (recs.basal) {
+    const b = recs.basal;
+    const doseStr = b.dose !== null ? `<strong>${b.dose} units</strong>` : '<em>See note below</em>';
+    html += `
+      <div class="dose-row">
+        <div class="dose-label">Dose</div>
+        <div class="dose-value highlight">${b.dose !== null ? b.dose + ' units' : '—'}</div>
+      </div>
+      <div class="dose-row">
+        <div class="dose-label">Insulin type</div>
+        <div class="dose-value" style="font-size:0.88rem;font-weight:600">${b.type}</div>
+      </div>
+      <div class="dose-row">
+        <div class="dose-label">Timing</div>
+        <div class="dose-value" style="font-size:0.85rem;font-weight:500;color:var(--gray-600)">${b.timing}</div>
+      </div>
+      <div style="margin-top:10px;padding:10px 12px;background:var(--gray-50);border-radius:6px;font-size:0.8rem;color:var(--gray-600);line-height:1.55">
+        <strong>Rationale:</strong> ${b.rationale}
+      </div>`;
+  } else {
+    html += `<div class="info-box blue"><span class="icon">ℹ️</span>
+      <div>No basal insulin on Day 1 for diet/oral patients. Add bedtime basal on Day 2 if fasting BG > 150 mg/dL, starting at 0.1–0.2 u/kg.</div>
+    </div>`;
+  }
+  html += `</div></div>`;
+
+  // ─ Nutritional ───────────────────────────────────────────────
+  html += `<div class="result-section">
+    <div class="result-section-header">🍽️ Nutritional (Mealtime) Insulin</div>
+    <div class="result-section-body">`;
+
+  if (recs.nutritional) {
+    const n = recs.nutritional;
+    html += `
+      <div class="dose-row">
+        <div class="dose-label">Dose per meal</div>
+        <div class="dose-value highlight">${n.perMeal !== null ? n.perMeal + ' units' : '—'}</div>
+      </div>`;
+    if (n.totalDaily) {
+      html += `<div class="dose-row">
+        <div class="dose-label">Total daily nutritional</div>
+        <div class="dose-value">${n.totalDaily} units/day</div>
+      </div>`;
+    }
+    html += `
+      <div class="dose-row">
+        <div class="dose-label">Insulin type</div>
+        <div class="dose-value" style="font-size:0.85rem;font-weight:600">${n.type}</div>
+      </div>
+      <div class="dose-row">
+        <div class="dose-label">Timing</div>
+        <div class="dose-value" style="font-size:0.83rem;font-weight:500;color:var(--gray-600)">${n.timing}</div>
+      </div>
+      ${n.steroidBoost ? `<div class="info-box amber" style="margin-top:10px"><span class="icon">💊</span><div>Steroid boost applied (+50%): heaviest glucose rise expected in afternoon/evening. Consider weighting dinner bolus higher.</div></div>` : ''}
+      <div style="margin-top:10px;padding:10px 12px;background:var(--gray-50);border-radius:6px;font-size:0.8rem;color:var(--gray-600);line-height:1.55">
+        <strong>Rationale:</strong> ${n.rationale}
+      </div>`;
+  } else {
+    html += `<div class="info-box amber"><span class="icon">⚠️</span>
+      <div><strong>No nutritional insulin ordered.</strong> Patient is NPO / not eating. Resume nutritional insulin when eating resumes, titrate to intake.</div>
+    </div>`;
+  }
+  html += `</div></div>`;
+
+  // ─ Correctional / Sliding Scale ──────────────────────────────
+  const c = recs.correctional;
+  const colNames = ['Low BMI (<18.5)', 'Standard (BMI 18.5–25)', 'High BMI (>25)'];
+  const colKey   = ['Column A', 'Column B', 'Column C'];
+
+  html += `<div class="result-section">
+    <div class="result-section-header">📊 Correctional (Sliding Scale) Insulin</div>
+    <div class="result-section-body">
+      <div class="dose-row">
+        <div class="dose-label">Selected scale</div>
+        <div class="dose-value" style="font-size:0.88rem;font-weight:600">
+          ${c.isBedtime ? 'Bedtime scale (conservative)' : colNames[c.column] + ' — ' + colKey[c.column]}
+          ${c.bmi ? `<div class="dose-rationale">BMI ${c.bmi} kg/m²</div>` : ''}
+        </div>
+      </div>
+      <div class="dose-row">
+        <div class="dose-label">Correction for current BG (${c.currentBg} mg/dL)</div>
+        <div class="dose-value highlight">${c.currentCorrDose} units</div>
+      </div>`;
+
+  // Full sliding scale table
+  html += `<div style="margin-top:14px">
+    <div class="section-label">Full correctional scale — lispro / aspart / glulisine (or regular)</div>
+    <table class="ss-table">
+      <thead>
+        <tr>
+          <th>BG (mg/dL)</th>
+          <th>Low BMI<br><small>Col A</small></th>
+          <th>Standard<br><small>Col B</small></th>
+          <th>High BMI<br><small>Col C</small></th>
+          <th>Bedtime<br><small>Col D</small></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${SS_TABLE.map(row => {
+          const highlight = c.currentBg >= row.bgMin && c.currentBg <= row.bgMax;
+          return `<tr class="${highlight ? 'highlighted-row' : ''}">
+            <td class="bg-col">${row.bgMax === 999 ? '>400' : row.bgMin + '–' + row.bgMax}</td>
+            ${row.doses.map((d,i) => `<td class="dose-col">${d} u${highlight && (c.isBedtime ? i===3 : i===c.column) ? ' ✓' : ''}</td>`).join('')}
+          </tr>`;
+        }).join('')}
+        <tr>
+          <td class="bg-col" style="color:var(--green);font-weight:700">≤130</td>
+          <td class="dose-col" colspan="4" style="color:var(--green)">0 units — no correction</td>
+        </tr>
+        <tr>
+          <td class="bg-col" style="color:var(--red);font-weight:700">&lt;70</td>
+          <td class="dose-col" colspan="4" style="color:var(--red)">Hold insulin — treat hypoglycemia</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>`;
+
+  html += `</div></div>`;
+
+  // ─ Special Notes ─────────────────────────────────────────────
+  if (recs.specialNotes.length) {
+    html += `<div class="result-section">
+      <div class="result-section-header">📌 Special Notes</div>
+      <div class="result-section-body">
+        <ul class="monitoring-list">
+          ${recs.specialNotes.map(n => `<li>${n}</li>`).join('')}
+        </ul>
+      </div>
+    </div>`;
+  }
+
+  // ─ Monitoring ─────────────────────────────────────────────────
+  html += `<div class="result-section">
+    <div class="result-section-header">🩺 Monitoring &amp; Hypoglycemia Protocol</div>
+    <div class="result-section-body">
+      <ul class="monitoring-list">
+        ${recs.monitoring.map(m => `<li>${m}</li>`).join('')}
+      </ul>
+    </div>
+  </div>`;
+
+  // ─ Summary banner ─────────────────────────────────────────────
+  const basalSummary      = recs.basal      ? `${recs.basal.dose ?? '?'} u ${recs.basal.type.split(' ')[0]} ${recs.basal.timing.split(',')[0]}`      : 'None';
+  const nutritionalSummary= recs.nutritional? `${recs.nutritional.perMeal ?? '?'} u per meal (${recs.nutritional.type.split(':')[0]})`                : 'None / NPO';
+  const corrSummary       = `${c.currentCorrDose} u now for BG ${c.currentBg}`;
+
+  html = `<div class="info-box green" style="margin-bottom:20px">
+    <span class="icon">✅</span>
+    <div>
+      <strong>Quick Summary</strong><br>
+      <span style="font-size:0.82rem;line-height:1.8">
+        Basal: <strong>${basalSummary}</strong><br>
+        Nutritional: <strong>${nutritionalSummary}</strong><br>
+        Correction now: <strong>${corrSummary}</strong>
+      </span>
+    </div>
+  </div>` + html;
+
+  bodyEl.innerHTML = html;
+}
+</script>
+</body>
+</html>
